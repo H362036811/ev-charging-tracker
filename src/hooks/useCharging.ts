@@ -15,9 +15,9 @@ function renumberRecords(records: ChargingRecord[], vehicleId: string) {
   records.filter(r => r.vehicle_id === vehicleId).sort((a, b) => new Date(a.charge_date).getTime() - new Date(b.charge_date).getTime()).forEach((r, i) => { r.charge_number = i + 1; });
 }
 
-async function supabaseInsert(table: string, data: any) { try { if (isSupabaseConfigured && supabase) await supabase.from(table).insert(data); } catch {} }
-async function supabaseUpdate(table: string, data: any, eq: [string, string]) { try { if (isSupabaseConfigured && supabase) await supabase.from(table).update(data).eq(eq[0], eq[1]); } catch {} }
-async function supabaseDelete(table: string, eq: [string, string]) { try { if (isSupabaseConfigured && supabase) await supabase.from(table).delete().eq(eq[0], eq[1]); } catch {} }
+async function supabaseInsert(table: string, data: any) { try { if (isSupabaseConfigured && supabase) { const result = await Promise.race([ supabase.from(table).insert(data), new Promise(resolve => setTimeout(() => resolve(null), 5000)) ]); } } catch (err) { console.error('Supabase insert error:', table, err); } }
+async function supabaseUpdate(table: string, data: any, eq: [string, string]) { try { if (isSupabaseConfigured && supabase) { await Promise.race([ supabase.from(table).update(data).eq(eq[0], eq[1]), new Promise(resolve => setTimeout(() => resolve(null), 5000)) ]); } } catch (err) { console.error('Supabase update error:', table, err); } }
+async function supabaseDelete(table: string, eq: [string, string]) { try { if (isSupabaseConfigured && supabase) { await Promise.race([ supabase.from(table).delete().eq(eq[0], eq[1]), new Promise(resolve => setTimeout(() => resolve(null), 5000)) ]); } } catch (err) { console.error('Supabase delete error:', table, err); } }
 
 export function useCharging() {
   const { user } = useAuth();
@@ -82,39 +82,58 @@ export function useCharging() {
 
   const addVehicle = useCallback(async (name: string, brand: string = '', model: string = '') => {
     if (!user) return;
-    const vehicle: Vehicle = { id: generateId(), name, brand, model, owner_id: user.id, created_at: new Date().toISOString() };
-    const all = loadData<Vehicle>(VEHICLES_KEY); all.push(vehicle); saveData(VEHICLES_KEY, all);
-    await supabaseInsert('ev_vehicles', { id: vehicle.id, name, brand, model, owner_id: user.id, created_at: vehicle.created_at });
-    doRefreshVehicles(); setSelectedVehicleId(vehicle.id); return vehicle;
+    try {
+      const vehicle: Vehicle = { id: generateId(), name, brand, model, owner_id: user.id, created_at: new Date().toISOString() };
+      const all = loadData<Vehicle>(VEHICLES_KEY); all.push(vehicle); saveData(VEHICLES_KEY, all);
+      doRefreshVehicles(); setSelectedVehicleId(vehicle.id);
+      supabaseInsert('ev_vehicles', { id: vehicle.id, name, brand, model, owner_id: user.id, created_at: vehicle.created_at }).catch(() => {});
+      return vehicle;
+    } catch (err) { console.error('addVehicle error:', err); return undefined; }
   }, [user]);
 
   const deleteVehicle = useCallback(async (vehicleId: string) => {
-    saveData(VEHICLES_KEY, loadData<Vehicle>(VEHICLES_KEY).filter(v => v.id !== vehicleId));
-    saveData(RECORDS_KEY, loadData<ChargingRecord>(RECORDS_KEY).filter(r => r.vehicle_id !== vehicleId));
-    saveData(SHARES_KEY, loadData<VehicleShare>(SHARES_KEY).filter(s => s.vehicle_id !== vehicleId));
-    await supabaseDelete('ev_vehicles', ['id', vehicleId]); doRefreshAll();
+    try {
+      saveData(VEHICLES_KEY, loadData<Vehicle>(VEHICLES_KEY).filter(v => v.id !== vehicleId));
+      saveData(RECORDS_KEY, loadData<ChargingRecord>(RECORDS_KEY).filter(r => r.vehicle_id !== vehicleId));
+      saveData(SHARES_KEY, loadData<VehicleShare>(SHARES_KEY).filter(s => s.vehicle_id !== vehicleId));
+      doRefreshAll();
+      supabaseDelete('ev_vehicles', ['id', vehicleId]).catch(() => {});
+    } catch (err) { console.error('deleteVehicle error:', err); }
   }, []);
 
   const addRecord = useCallback(async (input: ChargingRecordInput) => {
-    if (!user) return;
-    const allRecords = loadData<ChargingRecord>(RECORDS_KEY);
-    const vRecs = allRecords.filter(r => r.vehicle_id === input.vehicle_id).sort((a, b) => new Date(a.charge_date).getTime() - new Date(b.charge_date).getTime());
-    let chargeNumber = input.charge_number || (vRecs.filter(r => new Date(r.charge_date) < new Date(input.charge_date)).length + 1);
-    const record: ChargingRecord = { id: generateId(), vehicle_id: input.vehicle_id, user_id: user.id, charge_date: input.charge_date, odometer_km: input.odometer_km, charge_duration_hours: input.charge_duration_hours, charge_cost: input.charge_cost, distance_since_last_km: input.distance_since_last_km, charge_number: chargeNumber, station: input.station, notes: input.notes, created_at: new Date().toISOString() };
-    allRecords.push(record); renumberRecords(allRecords, input.vehicle_id); saveData(RECORDS_KEY, allRecords);
-    await supabaseInsert('ev_charging_records', record); doRefreshRecords(); return record;
+    if (!user) { console.error('addRecord: no user'); return undefined; }
+    try {
+      const allRecords = loadData<ChargingRecord>(RECORDS_KEY);
+      const vRecs = allRecords.filter(r => r.vehicle_id === input.vehicle_id).sort((a, b) => new Date(a.charge_date).getTime() - new Date(b.charge_date).getTime());
+      let chargeNumber = input.charge_number || (vRecs.filter(r => new Date(r.charge_date) < new Date(input.charge_date)).length + 1);
+      const record: ChargingRecord = { id: generateId(), vehicle_id: input.vehicle_id, user_id: user.id, charge_date: input.charge_date, odometer_km: input.odometer_km, charge_duration_hours: input.charge_duration_hours, charge_cost: input.charge_cost, distance_since_last_km: input.distance_since_last_km, charge_number: chargeNumber, station: input.station, notes: input.notes, created_at: new Date().toISOString() };
+      allRecords.push(record); renumberRecords(allRecords, input.vehicle_id); saveData(RECORDS_KEY, allRecords);
+      doRefreshRecords();
+      supabaseInsert('ev_charging_records', record).catch(() => {});
+      return record;
+    } catch (err) {
+      console.error('addRecord error:', err);
+      return undefined;
+    }
   }, [user]);
 
   const updateRecord = useCallback(async (id: string, input: Partial<ChargingRecordInput>) => {
-    const allRecords = loadData<ChargingRecord>(RECORDS_KEY); const idx = allRecords.findIndex(r => r.id === id); if (idx === -1) return;
-    allRecords[idx] = { ...allRecords[idx], ...input }; if (input.charge_date) renumberRecords(allRecords, allRecords[idx].vehicle_id);
-    saveData(RECORDS_KEY, allRecords); await supabaseUpdate('ev_charging_records', input, ['id', id]); doRefreshRecords();
+    try {
+      const allRecords = loadData<ChargingRecord>(RECORDS_KEY); const idx = allRecords.findIndex(r => r.id === id); if (idx === -1) return;
+      allRecords[idx] = { ...allRecords[idx], ...input }; if (input.charge_date) renumberRecords(allRecords, allRecords[idx].vehicle_id);
+      saveData(RECORDS_KEY, allRecords); doRefreshRecords();
+      supabaseUpdate('ev_charging_records', input, ['id', id]).catch(() => {});
+    } catch (err) { console.error('updateRecord error:', err); }
   }, []);
 
   const deleteRecord = useCallback(async (id: string) => {
-    const allRecords = loadData<ChargingRecord>(RECORDS_KEY); const rec = allRecords.find(r => r.id === id);
-    const filtered = allRecords.filter(r => r.id !== id); if (rec) renumberRecords(filtered, rec.vehicle_id);
-    saveData(RECORDS_KEY, filtered); await supabaseDelete('ev_charging_records', ['id', id]); doRefreshRecords();
+    try {
+      const allRecords = loadData<ChargingRecord>(RECORDS_KEY); const rec = allRecords.find(r => r.id === id);
+      const filtered = allRecords.filter(r => r.id !== id); if (rec) renumberRecords(filtered, rec.vehicle_id);
+      saveData(RECORDS_KEY, filtered); doRefreshRecords();
+      supabaseDelete('ev_charging_records', ['id', id]).catch(() => {});
+    } catch (err) { console.error('deleteRecord error:', err); }
   }, []);
 
   const getLastRecord = useCallback((vehicleId: string): ChargingRecord | null => {

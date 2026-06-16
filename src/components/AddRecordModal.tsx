@@ -28,6 +28,7 @@ export function AddRecordModal({ isOpen, onClose, editRecord }: AddRecordModalPr
   });
   const [saving, setSaving] = useState(false);
   const [autoCalculated, setAutoCalculated] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   // Initialize form
   useEffect(() => {
@@ -92,17 +93,31 @@ export function AddRecordModal({ isOpen, onClose, editRecord }: AddRecordModalPr
   };
 
   const handleSave = async () => {
-    if (!form.vehicle_id) return;
+    setSaveError('');
+    if (!form.vehicle_id) {
+      setSaveError('\u8BF7\u5148\u9009\u62E9\u8F66\u8F86');
+      return;
+    }
+    if (!form.charge_date) {
+      setSaveError('\u8BF7\u586B\u5199\u5145\u7535\u65E5\u671F');
+      return;
+    }
     setSaving(true);
     try {
       if (editRecord) {
         await updateRecord(editRecord.id, form);
       } else {
-        await addRecord(form);
+        const result = await addRecord(form);
+        if (!result) {
+          setSaveError('\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5');
+          setSaving(false);
+          return;
+        }
       }
       onClose();
     } catch (err) {
       console.error('Save failed:', err);
+      setSaveError('\u4FDD\u5B58\u51FA\u9519\uFF1A' + (err instanceof Error ? err.message : String(err)));
     }
     setSaving(false);
   };
@@ -215,9 +230,16 @@ export function AddRecordModal({ isOpen, onClose, editRecord }: AddRecordModalPr
             placeholder="其他备注信息"
           />
 
+          {/* Error message */}
+          {saveError && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-sm text-red-400">
+              {saveError}
+            </div>
+          )}
+          
           {/* Save */}
           <Button onClick={handleSave} className="w-full" size="lg" loading={saving}>
-            保存充电记录
+                        保存充电记录
           </Button>
         </div>
       </div>
