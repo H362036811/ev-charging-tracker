@@ -11,6 +11,7 @@ interface AddFuelModalProps {
   isOpen: boolean;
   onClose: () => void;
   editRecord?: FuelRecord | null;
+  initVehicleId?: string; // 点选车辆弹出时直接定位到该车
 }
 
 const DEFAULT_FORM: FuelRecordInput = {
@@ -27,11 +28,12 @@ const DEFAULT_FORM: FuelRecordInput = {
   notes: '',
 };
 
-export function AddFuelModal({ isOpen, onClose, editRecord }: AddFuelModalProps) {
-  const { vehicles, selectedVehicleId, addFuelRecord, updateFuelRecord, getLastFuelRecord } = useFuel();
+export function AddFuelModal({ isOpen, onClose, editRecord, initVehicleId }: AddFuelModalProps) {
+  const { vehicles, addFuelRecord, updateFuelRecord, getLastFuelRecord, getNextFuelNumber } = useFuel();
   const [form, setForm] = useState<FuelRecordInput>({ ...DEFAULT_FORM, fuel_date: getTodayStr() });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [manualFuelNumber, setManualFuelNumber] = useState(false);
 
   // Initialize form
   useEffect(() => {
@@ -47,12 +49,16 @@ export function AddFuelModal({ isOpen, onClose, editRecord }: AddFuelModalProps)
           total_amount: editRecord.total_amount,
           liters: editRecord.liters,
           distance_since_last_km: editRecord.distance_since_last_km,
+          fuel_number: editRecord.fuel_number,
           station: editRecord.station,
           notes: editRecord.notes,
         });
+        setManualFuelNumber(false);
       } else {
-        const vehicleId = selectedVehicleId || (vehicles[0]?.id ?? '');
+        // 新增模式：优先用传入的 initVehicleId，其次用第一辆车
+        const vehicleId = initVehicleId || (vehicles[0]?.id ?? '');
         const lastRecord = getLastFuelRecord(vehicleId);
+        const nextNum = getNextFuelNumber(vehicleId);
         setForm({
           vehicle_id: vehicleId,
           fuel_date: getTodayStr(),
@@ -63,13 +69,15 @@ export function AddFuelModal({ isOpen, onClose, editRecord }: AddFuelModalProps)
           total_amount: 0,
           liters: 0,
           distance_since_last_km: 0,
+          fuel_number: nextNum,
           station: lastRecord?.station ?? '',
           notes: '',
         });
+        setManualFuelNumber(false);
       }
       setSaveError('');
     }
-  }, [isOpen, editRecord, selectedVehicleId, vehicles]);
+  }, [isOpen, editRecord, initVehicleId, vehicles]);
 
   // When vehicle changes, update auto-fill
   const handleVehicleChange = (vehicleId: string) => {
@@ -79,6 +87,7 @@ export function AddFuelModal({ isOpen, onClose, editRecord }: AddFuelModalProps)
     } else {
       // 新增模式：切换车辆时自动填充上次数据
       const lastRecord = getLastFuelRecord(vehicleId);
+      const nextNum = getNextFuelNumber(vehicleId);
       setForm(prev => ({
         ...prev,
         vehicle_id: vehicleId,
@@ -86,9 +95,11 @@ export function AddFuelModal({ isOpen, onClose, editRecord }: AddFuelModalProps)
         unit_price: lastRecord?.unit_price ?? prev.unit_price,
         station: lastRecord?.station ?? prev.station,
         fuel_gauge: lastRecord?.fuel_gauge ?? prev.fuel_gauge,
+        fuel_number: nextNum,
         odometer_km: 0,
         distance_since_last_km: 0,
       }));
+      setManualFuelNumber(false);
     }
   };
 
@@ -133,25 +144,25 @@ export function AddFuelModal({ isOpen, onClose, editRecord }: AddFuelModalProps)
   const handleSave = async () => {
     setSaveError('');
     if (!form.vehicle_id) {
-      setSaveError('\u8BF7\u5148\u9009\u62E9\u8F66\u8F86');
+      setSaveError('请先选择车辆');
       return;
     }
     if (!form.fuel_date) {
-      setSaveError('\u8BF7\u586B\u5199\u52A0\u6CB9\u65E5\u671F');
+      setSaveError('请填写加油日期');
       return;
     }
     if (form.total_amount <= 0 && form.liters <= 0) {
-      setSaveError('\u8BF7\u586B\u5199\u52A0\u6CB9\u91D1\u989D\u6216\u5347\u6570');
+      setSaveError('请填写加油金额或升数');
       return;
     }
     setSaving(true);
     try {
       if (editRecord) {
-        await updateFuelRecord(editRecord.id, form);
+        await updateFuelRecord(editRecord.id, { ...form, manual_fuel_number: manualFuelNumber });
       } else {
-        const result = await addFuelRecord(form);
+        const result = await addFuelRecord({ ...form, manual_fuel_number: manualFuelNumber });
         if (!result) {
-          setSaveError('\u4FDD\u5B58\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5');
+          setSaveError('保存失败，请重试');
           setSaving(false);
           return;
         }
@@ -159,7 +170,7 @@ export function AddFuelModal({ isOpen, onClose, editRecord }: AddFuelModalProps)
       onClose();
     } catch (err) {
       console.error('Fuel save failed:', err);
-      setSaveError('\u4FDD\u5B58\u51FA\u9519\uFF1A' + (err instanceof Error ? err.message : String(err)));
+      setSaveError('保存出错：' + (err instanceof Error ? err.message : String(err)));
     }
     setSaving(false);
   };
@@ -203,6 +214,18 @@ export function AddFuelModal({ isOpen, onClose, editRecord }: AddFuelModalProps)
             type="date"
             value={form.fuel_date}
             onChange={e => setForm(prev => ({ ...prev, fuel_date: e.target.value }))}
+          />
+
+          {/* Fuel number */}
+          <Input
+            label="加油次数（自动编号，可修改）"
+            type="number"
+            value={form.fuel_number || ''}
+            onChange={e => {
+              setForm(prev => ({ ...prev, fuel_number: parseInt(e.target.value) || 0 }));
+              setManualFuelNumber(true);
+            }}
+            min={1}
           />
 
           {/* Odometer */}

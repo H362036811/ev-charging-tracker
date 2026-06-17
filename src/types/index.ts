@@ -97,6 +97,7 @@ export interface FuelRecord {
   total_amount: number;
   liters: number;
   distance_since_last_km: number;
+  fuel_number: number;
   station: string;
   notes: string;
   created_at: string;
@@ -115,8 +116,10 @@ export interface FuelRecordInput {
   total_amount: number;
   liters: number;
   distance_since_last_km: number;
+  fuel_number: number;
   station: string;
   notes: string;
+  manual_fuel_number?: boolean;
 }
 
 export interface FuelDashboardStats {

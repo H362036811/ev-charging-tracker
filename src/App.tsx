@@ -177,6 +177,7 @@ function AppContent() {
   const [fuelTab, setFuelTab] = useState<SubTab>(() => getPersistentTab('ev_last_fuel_tab'));
   const [showAddFuelModal, setShowAddFuelModal] = useState(false);
   const [editFuelRecord, setEditFuelRecord] = useState<FuelRecord | null>(null);
+  const [fuelInitVehicleId, setFuelInitVehicleId] = useState<string>('');
 
   if (isLoading) {
     return (
@@ -306,8 +307,8 @@ function AppContent() {
     >
       {fuelTab === 'records' && (
         <FuelRecords
-          onAddRecord={() => { setEditFuelRecord(null); setShowAddFuelModal(true); }}
-          onEditRecord={(record) => { setEditFuelRecord(record); setShowAddFuelModal(true); }}
+          onAddRecord={(vehicleId) => { setEditFuelRecord(null); setFuelInitVehicleId(vehicleId); setShowAddFuelModal(true); }}
+          onEditRecord={(record) => { setEditFuelRecord(record); setFuelInitVehicleId(''); setShowAddFuelModal(true); }}
         />
       )}
       {fuelTab === 'vehicles' && <VehicleManager />}
@@ -315,8 +316,9 @@ function AppContent() {
       {fuelTab === 'settings' && <SettingsPanel />}
       <AddFuelModal
         isOpen={showAddFuelModal}
-        onClose={() => { setShowAddFuelModal(false); setEditFuelRecord(null); }}
+        onClose={() => { setShowAddFuelModal(false); setEditFuelRecord(null); setFuelInitVehicleId(''); }}
         editRecord={editFuelRecord}
+        initVehicleId={fuelInitVehicleId}
       />
     </SubsystemLayout>
   );

@@ -7,7 +7,7 @@ import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 
 interface FuelRecordsProps {
-  onAddRecord: () => void;
+  onAddRecord: (vehicleId: string) => void;
   onEditRecord: (record: FuelRecord) => void;
 }
 
@@ -85,7 +85,7 @@ export function FuelRecords({ onAddRecord, onEditRecord }: FuelRecordsProps) {
       </div>
 
       {/* Add Record Button */}
-      <Button onClick={onAddRecord} className="w-full bg-orange-500 hover:bg-orange-600" size="lg">
+      <Button onClick={() => onAddRecord(selectedVehicleId)} className="w-full bg-orange-500 hover:bg-orange-600" size="lg">
         <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
         </svg>

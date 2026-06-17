@@ -11,6 +11,18 @@ const SHARES_KEY = 'ev_charging_shares';
 function loadData<T>(key: string): T[] { try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : []; } catch { return []; } }
 function saveData<T>(key: string, data: T[]) { localStorage.setItem(key, JSON.stringify(data)); }
 
+// 按日期+里程对某辆车重新编号
+function renumberFuelRecords(records: FuelRecord[], vehicleId: string) {
+  records
+    .filter(r => r.vehicle_id === vehicleId)
+    .sort((a, b) => {
+      const dt = new Date(a.fuel_date).getTime() - new Date(b.fuel_date).getTime();
+      if (dt !== 0) return dt;
+      return a.odometer_km - b.odometer_km;
+    })
+    .forEach((r, i) => { r.fuel_number = i + 1; });
+}
+
 async function supabaseInsert(table: string, data: any) { try { if (isSupabaseConfigured && supabase) { await Promise.race([ supabase.from(table).insert(data), new Promise(resolve => setTimeout(() => resolve(null), 5000)) ]); } } catch (err) { console.error('Supabase insert error:', table, err); } }
 async function supabaseUpdate(table: string, data: any, eq: [string, string]) { try { if (isSupabaseConfigured && supabase) { await Promise.race([ supabase.from(table).update(data).eq(eq[0], eq[1]), new Promise(resolve => setTimeout(() => resolve(null), 5000)) ]); } } catch (err) { console.error('Supabase update error:', table, err); } }
 async function supabaseDelete(table: string, eq: [string, string]) { try { if (isSupabaseConfigured && supabase) { await Promise.race([ supabase.from(table).delete().eq(eq[0], eq[1]), new Promise(resolve => setTimeout(() => resolve(null), 5000)) ]); } } catch (err) { console.error('Supabase delete error:', table, err); } }
@@ -83,6 +95,12 @@ export function useFuel() {
   const addFuelRecord = useCallback(async (input: FuelRecordInput) => {
     if (!user) { console.error('addFuelRecord: no user'); return undefined; }
     try {
+      const allRecords = loadData<FuelRecord>(FUEL_RECORDS_KEY);
+      // 计算加油次数：如果手动修改则保留，否则按时间排序自动编号
+      const vRecs = allRecords.filter(r => r.vehicle_id === input.vehicle_id);
+      let fuelNumber = input.fuel_number > 0 && input.manual_fuel_number
+        ? input.fuel_number
+        : (vRecs.filter(r => new Date(r.fuel_date) <= new Date(input.fuel_date)).length + 1);
       const record: FuelRecord = {
         id: generateId(),
         vehicle_id: input.vehicle_id,
@@ -95,21 +113,23 @@ export function useFuel() {
         total_amount: input.total_amount,
         liters: input.liters,
         distance_since_last_km: input.distance_since_last_km,
+        fuel_number: fuelNumber,
         station: input.station,
         notes: input.notes,
         created_at: new Date().toISOString(),
       };
-      const allRecords = loadData<FuelRecord>(FUEL_RECORDS_KEY);
       allRecords.push(record);
+      renumberFuelRecords(allRecords, input.vehicle_id);
       saveData(FUEL_RECORDS_KEY, allRecords);
       doRefreshFuelRecords();
+      const { manual_fuel_number, ...syncRecord } = { ...record, manual_fuel_number: undefined };
       supabaseInsert('ev_fuel_records', record).catch(() => {});
       return record;
     } catch (err) {
       console.error('addFuelRecord error:', err);
       return undefined;
     }
-  }, [user]);
+  }, [user, doRefreshFuelRecords]);
 
   const updateFuelRecord = useCallback(async (id: string, input: Partial<FuelRecordInput>) => {
     try {
@@ -117,25 +137,37 @@ export function useFuel() {
       const idx = allRecords.findIndex(r => r.id === id);
       if (idx === -1) return;
       allRecords[idx] = { ...allRecords[idx], ...input };
+      // 只有修改了日期且用户没有手动修改次数时，才自动重新编号
+      if (input.fuel_date && !input.manual_fuel_number) {
+        renumberFuelRecords(allRecords, allRecords[idx].vehicle_id);
+      }
       saveData(FUEL_RECORDS_KEY, allRecords);
       doRefreshFuelRecords();
-      supabaseUpdate('ev_fuel_records', input, ['id', id]).catch(() => {});
+      const { manual_fuel_number, ...syncInput } = input as any;
+      supabaseUpdate('ev_fuel_records', syncInput, ['id', id]).catch(() => {});
     } catch (err) { console.error('updateFuelRecord error:', err); }
-  }, []);
+  }, [doRefreshFuelRecords]);
 
   const deleteFuelRecord = useCallback(async (id: string) => {
     try {
       const allRecords = loadData<FuelRecord>(FUEL_RECORDS_KEY);
-      saveData(FUEL_RECORDS_KEY, allRecords.filter(r => r.id !== id));
+      const rec = allRecords.find(r => r.id === id);
+      const filtered = allRecords.filter(r => r.id !== id);
+      if (rec) renumberFuelRecords(filtered, rec.vehicle_id);
+      saveData(FUEL_RECORDS_KEY, filtered);
       doRefreshFuelRecords();
       supabaseDelete('ev_fuel_records', ['id', id]).catch(() => {});
     } catch (err) { console.error('deleteFuelRecord error:', err); }
-  }, []);
+  }, [doRefreshFuelRecords]);
 
   const getLastFuelRecord = useCallback((vehicleId: string): FuelRecord | null => {
     return loadData<FuelRecord>(FUEL_RECORDS_KEY)
       .filter(r => r.vehicle_id === vehicleId)
       .sort((a, b) => new Date(b.fuel_date).getTime() - new Date(a.fuel_date).getTime())[0] || null;
+  }, []);
+
+  const getNextFuelNumber = useCallback((vehicleId: string): number => {
+    return loadData<FuelRecord>(FUEL_RECORDS_KEY).filter(r => r.vehicle_id === vehicleId).length + 1;
   }, []);
 
   const getFuelStats = useCallback((): FuelDashboardStats => {
@@ -169,6 +201,7 @@ export function useFuel() {
     updateFuelRecord,
     deleteFuelRecord,
     getLastFuelRecord,
+    getNextFuelNumber,
     getFuelStats,
     syncFromCloud,
     refreshData: doRefreshAll,

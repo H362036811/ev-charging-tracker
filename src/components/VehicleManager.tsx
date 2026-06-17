@@ -14,6 +14,8 @@ export function VehicleManager() {
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [shareSelectedUserId, setShareSelectedUserId] = useState('');
+  const [shareManualUsername, setShareManualUsername] = useState('');
+  const [shareMode, setShareMode] = useState<'select' | 'manual'>('select');
   const [shareVehicleId, setShareVehicleId] = useState('');
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'success' | 'error'>('success');
@@ -28,9 +30,33 @@ export function VehicleManager() {
   };
 
   const handleShare = async () => {
-    if (!shareSelectedUserId || !shareVehicleId) return;
-    await shareVehicle(shareVehicleId, shareSelectedUserId);
+    const allUsers = getAllUsers();
+    let targetUserId = '';
+    if (shareMode === 'select') {
+      if (!shareSelectedUserId) return;
+      targetUserId = shareSelectedUserId;
+    } else {
+      const trimmed = shareManualUsername.trim();
+      if (!trimmed) return;
+      const found = allUsers.find(u => u.username.toLowerCase() === trimmed.toLowerCase());
+      if (!found) {
+        setMessage('未找到该用户');
+        setMessageType('error');
+        setTimeout(() => setMessage(''), 3000);
+        return;
+      }
+      if (found.id === user?.id) {
+        setMessage('不能共享给自己');
+        setMessageType('error');
+        setTimeout(() => setMessage(''), 3000);
+        return;
+      }
+      targetUserId = found.id;
+    }
+    if (!shareVehicleId || !targetUserId) return;
+    await shareVehicle(shareVehicleId, targetUserId);
     setShareSelectedUserId('');
+    setShareManualUsername('');
     setShareVehicleId('');
     setMessage('已成功共享');
     setMessageType('success');
@@ -105,17 +131,40 @@ export function VehicleManager() {
                   return (
                     <div className="mt-3 pt-3 border-t border-slate-700 space-y-2">
                       <p className="text-xs text-slate-400">共享此车辆给其他用户（直接生效）</p>
-                      {availableUsers.length === 0 ? (
-                        <p className="text-xs text-slate-500">暂无其他用户可共享</p>
+                      {/* 切换模式 */}
+                      <div className="flex gap-2 text-xs">
+                        <button
+                          className={`px-2 py-1 rounded ${shareMode === 'select' ? 'bg-sky-600 text-white' : 'bg-slate-700 text-slate-400'}`}
+                          onClick={() => setShareMode('select')}
+                        >下拉选择</button>
+                        <button
+                          className={`px-2 py-1 rounded ${shareMode === 'manual' ? 'bg-sky-600 text-white' : 'bg-slate-700 text-slate-400'}`}
+                          onClick={() => setShareMode('manual')}
+                        >手填用户名</button>
+                      </div>
+                      {shareMode === 'select' ? (
+                        availableUsers.length === 0 ? (
+                          <p className="text-xs text-slate-500">暂无其他用户可共享（可切换为手填模式）</p>
+                        ) : (
+                          <div className="flex gap-2">
+                            <Select
+                              options={availableUsers.map(u => ({ value: u.id, label: u.username + (u.email ? ` (${u.email})` : '') }))}
+                              value={shareSelectedUserId}
+                              onChange={e => setShareSelectedUserId(e.target.value)}
+                              className="flex-1"
+                            />
+                            <Button size="sm" onClick={handleShare} disabled={!shareSelectedUserId}>确认共享</Button>
+                          </div>
+                        )
                       ) : (
                         <div className="flex gap-2">
-                          <Select
-                            options={availableUsers.map(u => ({ value: u.id, label: u.username + (u.email ? ` (${u.email})` : '') }))}
-                            value={shareSelectedUserId}
-                            onChange={e => setShareSelectedUserId(e.target.value)}
+                          <Input
+                            value={shareManualUsername}
+                            onChange={e => setShareManualUsername(e.target.value)}
+                            placeholder="输入对方用户名"
                             className="flex-1"
                           />
-                          <Button size="sm" onClick={handleShare} disabled={!shareSelectedUserId}>确认共享</Button>
+                          <Button size="sm" onClick={handleShare} disabled={!shareManualUsername.trim()}>确认共享</Button>
                         </div>
                       )}
                       {message && (
