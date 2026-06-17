@@ -3,7 +3,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useCharging } from '../hooks/useCharging';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
-import { isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export function SettingsPanel() {
   const { user, logout } = useAuth();
@@ -49,6 +49,32 @@ export function SettingsPanel() {
     setTimeout(() => setMessage(''), 3000);
   };
 
+  const handleUploadToCloud = async () => {
+    if (!isSupabaseConfigured || !supabase) {
+      setMessage('未配置云同步');
+      setTimeout(() => setMessage(''), 3000);
+      return;
+    }
+    setMessage('正在上传本地数据到云端...');
+    try {
+      const vehicles = JSON.parse(localStorage.getItem('ev_charging_vehicles') || '[]');
+      const records = JSON.parse(localStorage.getItem('ev_charging_records') || '[]');
+      const fuelRecords = JSON.parse(localStorage.getItem('ev_fuel_records') || '[]');
+      const shares = JSON.parse(localStorage.getItem('ev_charging_shares') || '[]');
+      const profiles = JSON.parse(localStorage.getItem('ev_charging_profiles') || '[]');
+      if (vehicles.length > 0) await supabase.from('ev_vehicles').upsert(vehicles);
+      if (records.length > 0) await supabase.from('ev_charging_records').upsert(records);
+      if (fuelRecords.length > 0) await supabase.from('ev_fuel_records').upsert(fuelRecords);
+      if (shares.length > 0) await supabase.from('ev_vehicle_shares').upsert(shares);
+      if (profiles.length > 0) await supabase.from('ev_profiles').upsert(profiles);
+      setMessage('上传完成，其他设备登录后将自动同步');
+    } catch (err) {
+      console.error('Upload failed:', err);
+      setMessage('上传失败，请检查网络');
+    }
+    setTimeout(() => setMessage(''), 5000);
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       <h2 className="text-lg font-bold text-white">设置</h2>
@@ -78,8 +104,13 @@ export function SettingsPanel() {
             <p>同步状态：{isSupabaseConfigured ? '已配置' : '未配置'}</p>
           </div>
           <Button onClick={handleSync} className="w-full" variant={isSupabaseConfigured ? 'primary' : 'secondary'}>
-            {isSupabaseConfigured ? '立即同步' : '未配置云同步'}
+            {isSupabaseConfigured ? '立即同步（从云端下载）' : '未配置云同步'}
           </Button>
+          {isSupabaseConfigured && (
+            <Button onClick={handleUploadToCloud} className="w-full" variant="secondary">
+              上传本地数据到云端
+            </Button>
+          )}
           {!isSupabaseConfigured && (
             <p className="text-xs text-slate-500">需配置 VITE_SUPABASE_URL 和 VITE_SUPABASE_ANON_KEY 环境变量</p>
           )}

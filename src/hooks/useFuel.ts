@@ -23,7 +23,7 @@ function renumberFuelRecords(records: FuelRecord[], vehicleId: string) {
     .forEach((r, i) => { r.fuel_number = i + 1; });
 }
 
-async function supabaseInsert(table: string, data: any) { try { if (isSupabaseConfigured && supabase) { await Promise.race([ supabase.from(table).insert(data), new Promise(resolve => setTimeout(() => resolve(null), 5000)) ]); } } catch (err) { console.error('Supabase insert error:', table, err); } }
+async function supabaseInsert(table: string, data: any) { try { if (isSupabaseConfigured && supabase) { await Promise.race([ supabase.from(table).upsert(data), new Promise(resolve => setTimeout(() => resolve(null), 5000)) ]); } } catch (err) { console.error('Supabase upsert error:', table, err); } }
 async function supabaseUpdate(table: string, data: any, eq: [string, string]) { try { if (isSupabaseConfigured && supabase) { await Promise.race([ supabase.from(table).update(data).eq(eq[0], eq[1]), new Promise(resolve => setTimeout(() => resolve(null), 5000)) ]); } } catch (err) { console.error('Supabase update error:', table, err); } }
 async function supabaseDelete(table: string, eq: [string, string]) { try { if (isSupabaseConfigured && supabase) { await Promise.race([ supabase.from(table).delete().eq(eq[0], eq[1]), new Promise(resolve => setTimeout(() => resolve(null), 5000)) ]); } } catch (err) { console.error('Supabase delete error:', table, err); } }
 
@@ -77,6 +77,10 @@ export function useFuel() {
   useEffect(() => {
     if (!user) { setVehicles([]); setFuelRecords([]); setShares([]); setSelectedVehicleId(''); return; }
     try { doRefreshAll(); } catch (err) { console.error('Fuel load data error:', err); }
+    // 登录后自动从云端同步数据
+    if (isSupabaseConfigured && supabase) {
+      syncFromCloud().catch(() => {});
+    }
   }, [user?.id]);
 
   useEffect(() => {

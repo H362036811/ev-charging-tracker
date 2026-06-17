@@ -15,7 +15,7 @@ function renumberRecords(records: ChargingRecord[], vehicleId: string) {
   records.filter(r => r.vehicle_id === vehicleId).sort((a, b) => new Date(a.charge_date).getTime() - new Date(b.charge_date).getTime()).forEach((r, i) => { r.charge_number = i + 1; });
 }
 
-async function supabaseInsert(table: string, data: any) { try { if (isSupabaseConfigured && supabase) { const result = await Promise.race([ supabase.from(table).insert(data), new Promise(resolve => setTimeout(() => resolve(null), 5000)) ]); } } catch (err) { console.error('Supabase insert error:', table, err); } }
+async function supabaseInsert(table: string, data: any) { try { if (isSupabaseConfigured && supabase) { await Promise.race([ supabase.from(table).upsert(data), new Promise(resolve => setTimeout(() => resolve(null), 5000)) ]); } } catch (err) { console.error('Supabase upsert error:', table, err); } }
 async function supabaseUpdate(table: string, data: any, eq: [string, string]) { try { if (isSupabaseConfigured && supabase) { await Promise.race([ supabase.from(table).update(data).eq(eq[0], eq[1]), new Promise(resolve => setTimeout(() => resolve(null), 5000)) ]); } } catch (err) { console.error('Supabase update error:', table, err); } }
 async function supabaseDelete(table: string, eq: [string, string]) { try { if (isSupabaseConfigured && supabase) { await Promise.race([ supabase.from(table).delete().eq(eq[0], eq[1]), new Promise(resolve => setTimeout(() => resolve(null), 5000)) ]); } } catch (err) { console.error('Supabase delete error:', table, err); } }
 
@@ -72,6 +72,10 @@ export function useCharging() {
       }
       doRefreshAll();
     } catch (err) { console.error('Load data error:', err); }
+    // 登录后自动从云端同步数据
+    if (isSupabaseConfigured && supabase) {
+      syncFromCloud().catch(() => {});
+    }
   }, [user?.id]);
 
   useEffect(() => {

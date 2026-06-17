@@ -67,6 +67,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true);
       let profiles = loadProfiles();
+
+      // 如果本地没有用户资料且 Supabase 已配置，尝试从云端拉取
+      if (profiles.length === 0 && isSupabaseConfigured && supabase) {
+        try {
+          const { data, error } = await supabase.from('ev_profiles').select('*');
+          if (!error && data && data.length > 0) {
+            profiles = data;
+            localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
+          }
+        } catch (e) { console.error('Failed to load profiles from cloud:', e); }
+      }
+
       if (profiles.length === 0) {
         profiles = await getDefaultProfiles();
         saveProfiles(profiles);
