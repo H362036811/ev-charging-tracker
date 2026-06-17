@@ -29,6 +29,7 @@ export function AddRecordModal({ isOpen, onClose, editRecord }: AddRecordModalPr
   const [saving, setSaving] = useState(false);
   const [autoCalculated, setAutoCalculated] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [manualChargeNumber, setManualChargeNumber] = useState(false);
 
   // Initialize form
   useEffect(() => {
@@ -45,6 +46,7 @@ export function AddRecordModal({ isOpen, onClose, editRecord }: AddRecordModalPr
           station: editRecord.station,
           notes: editRecord.notes,
         });
+        setManualChargeNumber(false);
       } else {
         const vehicleId = selectedVehicleId || (vehicles[0]?.id ?? '');
         const lastRecord = getLastRecord(vehicleId);
@@ -61,6 +63,7 @@ export function AddRecordModal({ isOpen, onClose, editRecord }: AddRecordModalPr
           notes: '',
         });
         setAutoCalculated(false);
+        setManualChargeNumber(false);
       }
     }
   }, [isOpen, editRecord, selectedVehicleId, vehicles]);
@@ -105,7 +108,7 @@ export function AddRecordModal({ isOpen, onClose, editRecord }: AddRecordModalPr
     setSaving(true);
     try {
       if (editRecord) {
-        await updateRecord(editRecord.id, form);
+        await updateRecord(editRecord.id, { ...form, manual_charge_number: manualChargeNumber });
       } else {
         const result = await addRecord(form);
         if (!result) {
@@ -157,7 +160,10 @@ export function AddRecordModal({ isOpen, onClose, editRecord }: AddRecordModalPr
             label="充电次数（自动编号，可修改）"
             type="number"
             value={form.charge_number}
-            onChange={e => setForm(prev => ({ ...prev, charge_number: parseInt(e.target.value) || 0 }))}
+            onChange={e => {
+              setForm(prev => ({ ...prev, charge_number: parseInt(e.target.value) || 0 }));
+              setManualChargeNumber(true);
+            }}
             min={1}
           />
 

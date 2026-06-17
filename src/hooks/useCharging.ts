@@ -64,7 +64,14 @@ export function useCharging() {
 
   useEffect(() => {
     if (!user) { setVehicles([]); setRecords([]); setShares([]); setSelectedVehicleId(''); return; }
-    try { doRefreshAll(); } catch (err) { console.error('Load data error:', err); }
+    try {
+      // 清理旧版本 pending/rejected 状态数据
+      const allShares = loadData<VehicleShare>(SHARES_KEY);
+      if (allShares.some(s => s.status !== 'confirmed')) {
+        saveData(SHARES_KEY, allShares.filter(s => s.status === 'confirmed'));
+      }
+      doRefreshAll();
+    } catch (err) { console.error('Load data error:', err); }
   }, [user?.id]);
 
   useEffect(() => {
@@ -121,9 +128,12 @@ export function useCharging() {
   const updateRecord = useCallback(async (id: string, input: Partial<ChargingRecordInput>) => {
     try {
       const allRecords = loadData<ChargingRecord>(RECORDS_KEY); const idx = allRecords.findIndex(r => r.id === id); if (idx === -1) return;
-      allRecords[idx] = { ...allRecords[idx], ...input }; if (input.charge_date) renumberRecords(allRecords, allRecords[idx].vehicle_id);
+      allRecords[idx] = { ...allRecords[idx], ...input };
+      // 只有修改了日期且用户没有手动修改编号时，才自动重新编号
+      if (input.charge_date && !input.manual_charge_number) { renumberRecords(allRecords, allRecords[idx].vehicle_id); }
       saveData(RECORDS_KEY, allRecords); doRefreshRecords();
-      supabaseUpdate('ev_charging_records', input, ['id', id]).catch(() => {});
+      const { manual_charge_number, ...syncInput } = input;
+      supabaseUpdate('ev_charging_records', syncInput, ['id', id]).catch(() => {});
     } catch (err) { console.error('updateRecord error:', err); }
   }, []);
 
@@ -145,15 +155,23 @@ export function useCharging() {
   const shareVehicle = useCallback(async (vehicleId: string, targetUserId: string) => {
     if (!user) return;
     const allShares = loadData<VehicleShare>(SHARES_KEY);
-    if (allShares.find(s => s.vehicle_id === vehicleId && s.shared_with_user_id === targetUserId)) return;
-    const share: VehicleShare = { id: generateId(), vehicle_id: vehicleId, shared_with_user_id: targetUserId, shared_by_user_id: user.id, status: 'pending', created_at: new Date().toISOString() };
+    if (allShares.find(s => s.vehicle_id === vehicleId && s.shared_with_user_id === targetUserId && s.status === 'confirmed')) return;
+    const share: VehicleShare = { id: generateId(), vehicle_id: vehicleId, shared_with_user_id: targetUserId, shared_by_user_id: user.id, status: 'confirmed', created_at: new Date().toISOString() };
     allShares.push(share); saveData(SHARES_KEY, allShares);
-    await supabaseInsert('ev_vehicle_shares', share); doRefreshShares(); return share;
+    supabaseInsert('ev_vehicle_shares', share).catch(() => {}); doRefreshAll(); return share;
+  }, [user]);
+
+  const revokeShare = useCallback(async (shareId: string) => {
+    if (!user) return;
+    const allShares = loadData<VehicleShare>(SHARES_KEY);
+    saveData(SHARES_KEY, allShares.filter(s => s.id !== shareId));
+    supabaseDelete('ev_vehicle_shares', ['id', shareId]).catch(() => {});
+    doRefreshAll();
   }, [user]);
 
   const respondToShare = useCallback(async (shareId: string, response: 'confirmed' | 'rejected') => {
     const allShares = loadData<VehicleShare>(SHARES_KEY); const idx = allShares.findIndex(s => s.id === shareId); if (idx === -1) return;
-    allShares[idx].status = response; saveData(SHARES_KEY, allShares);
+    allShares[idx].status = response as 'confirmed'; saveData(SHARES_KEY, allShares);
     await supabaseUpdate('ev_vehicle_shares', { status: response }, ['id', shareId]); doRefreshAll();
   }, []);
 
@@ -185,5 +203,5 @@ export function useCharging() {
 
   const currentVehicleRecords = records.filter(r => r.vehicle_id === selectedVehicleId);
 
-  return { vehicles, records: currentVehicleRecords, allRecords: records, shares, selectedVehicleId, setSelectedVehicleId, addVehicle, deleteVehicle, addRecord, updateRecord, deleteRecord, getLastRecord, getNextChargeNumber, shareVehicle, respondToShare, getStats, exportData, importData, syncFromCloud, refreshData: doRefreshAll };
+  return { vehicles, records: currentVehicleRecords, allRecords: records, shares, selectedVehicleId, setSelectedVehicleId, addVehicle, deleteVehicle, addRecord, updateRecord, deleteRecord, getLastRecord, getNextChargeNumber, shareVehicle, revokeShare, respondToShare, getStats, exportData, importData, syncFromCloud, refreshData: doRefreshAll };
 }

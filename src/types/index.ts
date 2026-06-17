@@ -1,4 +1,11 @@
 export type UserRole = 'admin' | 'user';
+export type FuelType = 'gasoline_92' | 'gasoline_95' | 'gasoline_98' | 'diesel_0';
+export const FUEL_TYPE_LABELS: Record<FuelType, string> = {
+  gasoline_92: '92#汽油',
+  gasoline_95: '95#汽油',
+  gasoline_98: '98#汽油',
+  diesel_0: '0#柴油',
+};
 
 export interface Profile {
   id: string;
@@ -26,7 +33,7 @@ export interface VehicleShare {
   vehicle_id: string;
   shared_with_user_id: string;
   shared_by_user_id: string;
-  status: 'pending' | 'confirmed' | 'rejected';
+  status: 'confirmed';
   created_at: string;
   // derived
   vehicle_name?: string;
@@ -62,6 +69,7 @@ export interface ChargingRecordInput {
   charge_number: number;
   station: string;
   notes: string;
+  manual_charge_number?: boolean;
 }
 
 export interface AuthState {
@@ -75,4 +83,45 @@ export interface DashboardStats {
   totalCount: number;
   totalDuration: number;
   totalDistance: number;
+}
+
+export interface FuelRecord {
+  id: string;
+  vehicle_id: string;
+  user_id: string;
+  fuel_date: string;
+  odometer_km: number;
+  fuel_gauge: number;
+  fuel_type: FuelType;
+  unit_price: number;
+  total_amount: number;
+  liters: number;
+  distance_since_last_km: number;
+  station: string;
+  notes: string;
+  created_at: string;
+  // derived
+  vehicle_name?: string;
+  user_name?: string;
+}
+
+export interface FuelRecordInput {
+  vehicle_id: string;
+  fuel_date: string;
+  odometer_km: number;
+  fuel_gauge: number;
+  fuel_type: FuelType;
+  unit_price: number;
+  total_amount: number;
+  liters: number;
+  distance_since_last_km: number;
+  station: string;
+  notes: string;
+}
+
+export interface FuelDashboardStats {
+  totalAmount: number;
+  totalCount: number;
+  totalLiters: number;
+  avgConsumption: number;
 }

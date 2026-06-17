@@ -6,7 +6,7 @@ import { Input } from './ui/input';
 import { Card, CardContent } from './ui/card';
 
 export function VehicleManager() {
-  const { vehicles, addVehicle, deleteVehicle, shares, shareVehicle, respondToShare } = useCharging();
+  const { vehicles, addVehicle, deleteVehicle, shares, shareVehicle, revokeShare } = useCharging();
   const { user, getAllUsers } = useAuth();
   const [showAdd, setShowAdd] = useState(false);
   const [name, setName] = useState('');
@@ -15,6 +15,7 @@ export function VehicleManager() {
   const [shareUsername, setShareUsername] = useState('');
   const [shareVehicleId, setShareVehicleId] = useState('');
   const [message, setMessage] = useState('');
+  const [messageType, setMessageType] = useState<'success' | 'error'>('success');
 
   const handleAdd = async () => {
     if (!name.trim()) return;
@@ -31,28 +32,25 @@ export function VehicleManager() {
     const targetUser = allUsers.find(u => u.username.toLowerCase() === shareUsername.trim().toLowerCase());
     if (!targetUser) {
       setMessage('未找到该用户');
+      setMessageType('error');
       setTimeout(() => setMessage(''), 3000);
       return;
     }
     if (targetUser.id === user?.id) {
       setMessage('不能共享给自己');
+      setMessageType('error');
       setTimeout(() => setMessage(''), 3000);
       return;
     }
     await shareVehicle(shareVehicleId, targetUser.id);
     setShareUsername('');
     setShareVehicleId('');
-    setMessage('已发送共享请求，等待对方确认');
+    setMessage('已成功共享');
+    setMessageType('success');
     setTimeout(() => setMessage(''), 3000);
   };
 
-  const handleRespond = async (shareId: string, response: 'confirmed' | 'rejected') => {
-    await respondToShare(shareId, response);
-  };
-
-  // Pending shares for current user
-  const pendingShares = shares.filter(s => s.shared_with_user_id === user?.id && s.status === 'pending');
-  // Confirmed shares (both directions)
+  // Confirmed shares visible to current user
   const confirmedShares = shares.filter(s => s.status === 'confirmed');
 
   return (
@@ -114,7 +112,7 @@ export function VehicleManager() {
                 {/* Share form for this vehicle */}
                 {shareVehicleId === v.id && (
                   <div className="mt-3 pt-3 border-t border-slate-700 space-y-2">
-                    <p className="text-xs text-slate-400">输入用户名共享此车辆给对方</p>
+                    <p className="text-xs text-slate-400">输入用户名共享此车辆给对方（直接生效）</p>
                     <div className="flex gap-2">
                       <Input
                         value={shareUsername}
@@ -124,7 +122,9 @@ export function VehicleManager() {
                       />
                       <Button size="sm" onClick={handleShare}>确认共享</Button>
                     </div>
-                    {message && <p className="text-xs text-green-400">{message}</p>}
+                    {message && (
+                      <p className={`text-xs ${messageType === 'success' ? 'text-green-400' : 'text-red-400'}`}>{message}</p>
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -133,47 +133,32 @@ export function VehicleManager() {
         </div>
       )}
 
-      {/* Pending Share Requests */}
-      {pendingShares.length > 0 && (
-        <div className="mt-6">
-          <h3 className="text-sm font-bold text-white mb-2">待确认的共享请求</h3>
-          <div className="space-y-2">
-            {pendingShares.map(s => {
-              const allUsers = getAllUsers();
-              const fromUser = allUsers.find(u => u.id === s.shared_by_user_id);
-              const vehicle = vehicles.find(v => v.id === s.vehicle_id);
-              return (
-                <Card key={s.id}>
-                  <CardContent className="p-3">
-                    <p className="text-sm text-slate-300">
-                      <span className="text-sky-400">{fromUser?.username}</span> 想与您共享车辆
-                      <span className="text-white font-bold"> {vehicle?.name || '未知'}</span>
-                    </p>
-                    <div className="flex gap-2 mt-2">
-                      <Button size="sm" onClick={() => handleRespond(s.id, 'confirmed')}>接受</Button>
-                      <Button variant="danger" size="sm" onClick={() => handleRespond(s.id, 'rejected')}>拒绝</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Confirmed Shares */}
       {confirmedShares.length > 0 && (
         <div className="mt-4">
-          <h3 className="text-sm font-bold text-white mb-2">已确认的共享</h3>
-          <div className="space-y-1">
+          <h3 className="text-sm font-bold text-white mb-2">已共享</h3>
+          <div className="space-y-2">
             {confirmedShares.map(s => {
               const allUsers = getAllUsers();
               const otherUser = allUsers.find(u => u.id === (s.shared_by_user_id === user?.id ? s.shared_with_user_id : s.shared_by_user_id));
               const vehicle = vehicles.find(v => v.id === s.vehicle_id);
+              const isOwner = s.shared_by_user_id === user?.id;
               return (
-                <div key={s.id} className="text-xs text-slate-400 py-1">
-                  {vehicle?.name || '未知车辆'} — 与 <span className="text-sky-400">{otherUser?.username}</span> 共享
-                </div>
+                <Card key={s.id}>
+                  <CardContent className="p-3 flex items-center justify-between">
+                    <div className="text-xs text-slate-300">
+                      <span className="font-medium text-white">{vehicle?.name || '未知车辆'}</span>
+                      {' — 与 '}
+                      <span className="text-sky-400">{otherUser?.username || '未知用户'}</span>
+                      {' 共享'}
+                    </div>
+                    {isOwner && (
+                      <Button variant="danger" size="sm" onClick={() => revokeShare(s.id)}>
+                        撤销
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
               );
             })}
           </div>

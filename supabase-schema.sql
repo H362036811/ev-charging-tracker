@@ -89,3 +89,35 @@ CREATE POLICY "ev_vehicle_shares updatable" ON ev_vehicle_shares FOR UPDATE USIN
 ALTER PUBLICATION supabase_realtime ADD TABLE ev_charging_records;
 ALTER PUBLICATION supabase_realtime ADD TABLE ev_vehicles;
 ALTER PUBLICATION supabase_realtime ADD TABLE ev_vehicle_shares;
+
+-- ============================================================
+-- 汽车油耗统计表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS ev_fuel_records (
+  id TEXT PRIMARY KEY,
+  vehicle_id TEXT NOT NULL REFERENCES ev_vehicles(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES ev_profiles(id),
+  fuel_date DATE NOT NULL,
+  odometer_km NUMERIC(10,1) DEFAULT 0,
+  fuel_gauge NUMERIC DEFAULT 4,
+  fuel_type TEXT DEFAULT 'gasoline_95' CHECK (fuel_type IN ('gasoline_92', 'gasoline_95', 'gasoline_98', 'diesel_0')),
+  unit_price NUMERIC(10,3) DEFAULT 0,
+  total_amount NUMERIC(10,2) DEFAULT 0,
+  liters NUMERIC(10,2) DEFAULT 0,
+  distance_since_last_km NUMERIC(10,1) DEFAULT 0,
+  station TEXT DEFAULT '',
+  notes TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE ev_fuel_records ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "ev_fuel_records readable" ON ev_fuel_records FOR SELECT USING (true);
+CREATE POLICY "ev_fuel_records insertable" ON ev_fuel_records FOR INSERT WITH CHECK (true);
+CREATE POLICY "ev_fuel_records updatable" ON ev_fuel_records FOR UPDATE USING (true);
+CREATE POLICY "ev_fuel_records deletable" ON ev_fuel_records FOR DELETE USING (true);
+
+CREATE INDEX IF NOT EXISTS idx_ev_fuel_records_vehicle ON ev_fuel_records(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_ev_fuel_records_date ON ev_fuel_records(fuel_date);
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ev_fuel_records;
