@@ -23,14 +23,14 @@ export function useFuel() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>('');
   const channelRef = useRef<any>(null);
 
-  function getUserVehicleIds(): string[] {
+  const getUserVehicleIds = useCallback((): string[] => {
     const allVehicles = loadData<Vehicle>(VEHICLES_KEY);
     const allShares = loadData<VehicleShare>(SHARES_KEY);
     const sharedIds = allShares.filter(s => s.shared_with_user_id === user?.id && s.status === 'confirmed').map(s => s.vehicle_id);
     return allVehicles.filter(v => v.owner_id === user?.id || sharedIds.includes(v.id)).map(v => v.id);
-  }
+  }, [user?.id]);
 
-  function doRefreshVehicles() {
+  const doRefreshVehicles = useCallback(() => {
     try {
       const ids = getUserVehicleIds();
       const allVehicles = loadData<Vehicle>(VEHICLES_KEY);
@@ -40,9 +40,9 @@ export function useFuel() {
         setSelectedVehicleId(myVehicles[0].id);
       }
     } catch (err) { console.error('Fuel refresh vehicles error:', err); }
-  }
+  }, [user?.id, getUserVehicleIds, selectedVehicleId]);
 
-  function doRefreshFuelRecords() {
+  const doRefreshFuelRecords = useCallback(() => {
     try {
       const ids = getUserVehicleIds();
       const allRecords = loadData<FuelRecord>(FUEL_RECORDS_KEY);
@@ -51,16 +51,16 @@ export function useFuel() {
         .sort((a, b) => new Date(b.fuel_date).getTime() - new Date(a.fuel_date).getTime());
       setFuelRecords(myRecords);
     } catch (err) { console.error('Fuel refresh records error:', err); }
-  }
+  }, [user?.id, getUserVehicleIds]);
 
-  function doRefreshShares() {
+  const doRefreshShares = useCallback(() => {
     try {
       const allShares = loadData<VehicleShare>(SHARES_KEY);
       setShares(allShares.filter(s => s.shared_by_user_id === user?.id || s.shared_with_user_id === user?.id));
     } catch (err) { console.error('Fuel refresh shares error:', err); }
-  }
+  }, [user?.id]);
 
-  function doRefreshAll() { doRefreshVehicles(); doRefreshFuelRecords(); doRefreshShares(); }
+  const doRefreshAll = useCallback(() => { doRefreshVehicles(); doRefreshFuelRecords(); doRefreshShares(); }, [doRefreshVehicles, doRefreshFuelRecords, doRefreshShares]);
 
   useEffect(() => {
     if (!user) { setVehicles([]); setFuelRecords([]); setShares([]); setSelectedVehicleId(''); return; }

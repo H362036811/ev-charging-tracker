@@ -3,6 +3,7 @@ import { useCharging } from '../hooks/useCharging';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { Select } from './ui/select';
 import { Card, CardContent } from './ui/card';
 
 export function VehicleManager() {
@@ -12,7 +13,7 @@ export function VehicleManager() {
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
-  const [shareUsername, setShareUsername] = useState('');
+  const [shareSelectedUserId, setShareSelectedUserId] = useState('');
   const [shareVehicleId, setShareVehicleId] = useState('');
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'success' | 'error'>('success');
@@ -27,23 +28,9 @@ export function VehicleManager() {
   };
 
   const handleShare = async () => {
-    if (!shareUsername.trim() || !shareVehicleId) return;
-    const allUsers = getAllUsers();
-    const targetUser = allUsers.find(u => u.username.toLowerCase() === shareUsername.trim().toLowerCase());
-    if (!targetUser) {
-      setMessage('未找到该用户');
-      setMessageType('error');
-      setTimeout(() => setMessage(''), 3000);
-      return;
-    }
-    if (targetUser.id === user?.id) {
-      setMessage('不能共享给自己');
-      setMessageType('error');
-      setTimeout(() => setMessage(''), 3000);
-      return;
-    }
-    await shareVehicle(shareVehicleId, targetUser.id);
-    setShareUsername('');
+    if (!shareSelectedUserId || !shareVehicleId) return;
+    await shareVehicle(shareVehicleId, shareSelectedUserId);
+    setShareSelectedUserId('');
     setShareVehicleId('');
     setMessage('已成功共享');
     setMessageType('success');
@@ -110,23 +97,33 @@ export function VehicleManager() {
                 </div>
 
                 {/* Share form for this vehicle */}
-                {shareVehicleId === v.id && (
-                  <div className="mt-3 pt-3 border-t border-slate-700 space-y-2">
-                    <p className="text-xs text-slate-400">输入用户名共享此车辆给对方（直接生效）</p>
-                    <div className="flex gap-2">
-                      <Input
-                        value={shareUsername}
-                        onChange={e => setShareUsername(e.target.value)}
-                        placeholder="对方用户名"
-                        className="flex-1"
-                      />
-                      <Button size="sm" onClick={handleShare}>确认共享</Button>
+                {shareVehicleId === v.id && (() => {
+                  const allUsers = getAllUsers();
+                  const confirmedSharesForVehicle = confirmedShares.filter(s => s.vehicle_id === v.id);
+                  const sharedUserIds = confirmedSharesForVehicle.map(s => s.shared_with_user_id);
+                  const availableUsers = allUsers.filter(u => u.id !== user?.id && !sharedUserIds.includes(u.id));
+                  return (
+                    <div className="mt-3 pt-3 border-t border-slate-700 space-y-2">
+                      <p className="text-xs text-slate-400">共享此车辆给其他用户（直接生效）</p>
+                      {availableUsers.length === 0 ? (
+                        <p className="text-xs text-slate-500">暂无其他用户可共享</p>
+                      ) : (
+                        <div className="flex gap-2">
+                          <Select
+                            options={availableUsers.map(u => ({ value: u.id, label: u.username + (u.email ? ` (${u.email})` : '') }))}
+                            value={shareSelectedUserId}
+                            onChange={e => setShareSelectedUserId(e.target.value)}
+                            className="flex-1"
+                          />
+                          <Button size="sm" onClick={handleShare} disabled={!shareSelectedUserId}>确认共享</Button>
+                        </div>
+                      )}
+                      {message && (
+                        <p className={`text-xs ${messageType === 'success' ? 'text-green-400' : 'text-red-400'}`}>{message}</p>
+                      )}
                     </div>
-                    {message && (
-                      <p className={`text-xs ${messageType === 'success' ? 'text-green-400' : 'text-red-400'}`}>{message}</p>
-                    )}
-                  </div>
-                )}
+                  );
+                })()}
               </CardContent>
             </Card>
           ))}

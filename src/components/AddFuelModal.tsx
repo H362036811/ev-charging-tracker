@@ -73,17 +73,23 @@ export function AddFuelModal({ isOpen, onClose, editRecord }: AddFuelModalProps)
 
   // When vehicle changes, update auto-fill
   const handleVehicleChange = (vehicleId: string) => {
-    const lastRecord = getLastFuelRecord(vehicleId);
-    setForm(prev => ({
-      ...prev,
-      vehicle_id: vehicleId,
-      fuel_type: lastRecord?.fuel_type ?? prev.fuel_type,
-      unit_price: lastRecord?.unit_price ?? prev.unit_price,
-      station: lastRecord?.station ?? prev.station,
-      fuel_gauge: lastRecord?.fuel_gauge ?? prev.fuel_gauge,
-      odometer_km: 0,
-      distance_since_last_km: 0,
-    }));
+    if (editRecord) {
+      // 编辑模式：只修改车辆ID，不重置其他字段
+      setForm(prev => ({ ...prev, vehicle_id: vehicleId }));
+    } else {
+      // 新增模式：切换车辆时自动填充上次数据
+      const lastRecord = getLastFuelRecord(vehicleId);
+      setForm(prev => ({
+        ...prev,
+        vehicle_id: vehicleId,
+        fuel_type: lastRecord?.fuel_type ?? prev.fuel_type,
+        unit_price: lastRecord?.unit_price ?? prev.unit_price,
+        station: lastRecord?.station ?? prev.station,
+        fuel_gauge: lastRecord?.fuel_gauge ?? prev.fuel_gauge,
+        odometer_km: 0,
+        distance_since_last_km: 0,
+      }));
+    }
   };
 
   // Auto-calculate distance when odometer changes

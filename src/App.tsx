@@ -14,6 +14,15 @@ import { Card, CardContent } from './components/ui/card';
 type Module = 'home' | 'charging' | 'fuel';
 type SubTab = 'records' | 'vehicles' | 'admin' | 'settings';
 
+function getPersistentModule(): Module {
+  const v = localStorage.getItem('ev_last_module');
+  return (v === 'charging' || v === 'fuel') ? v : 'home';
+}
+function getPersistentTab(key: string): SubTab {
+  const v = localStorage.getItem(key);
+  return (v === 'records' || v === 'vehicles' || v === 'admin' || v === 'settings') ? v : 'records';
+}
+
 interface NavItem {
   tab: SubTab;
   label: string;
@@ -153,15 +162,19 @@ function SubsystemLayout({ title, headerIconPath, headerBgColor, activeTab, setA
 
 function AppContent() {
   const { user, isAuthenticated, isLoading } = useAuth();
-  const [module, setModule] = useState<Module>('home');
+  const [module, setModule] = useState<Module>(getPersistentModule);
+
+  const handleSetModule = (m: Module) => { localStorage.setItem('ev_last_module', m); setModule(m); };
+  const handleSetChargingTab = (t: SubTab) => { localStorage.setItem('ev_last_charging_tab', t); setChargingTab(t); };
+  const handleSetFuelTab = (t: SubTab) => { localStorage.setItem('ev_last_fuel_tab', t); setFuelTab(t); };
 
   // Charging subsystem state
-  const [chargingTab, setChargingTab] = useState<SubTab>('records');
+  const [chargingTab, setChargingTab] = useState<SubTab>(() => getPersistentTab('ev_last_charging_tab'));
   const [showAddChargingModal, setShowAddChargingModal] = useState(false);
   const [editChargingRecord, setEditChargingRecord] = useState<ChargingRecord | null>(null);
 
   // Fuel subsystem state
-  const [fuelTab, setFuelTab] = useState<SubTab>('records');
+  const [fuelTab, setFuelTab] = useState<SubTab>(() => getPersistentTab('ev_last_fuel_tab'));
   const [showAddFuelModal, setShowAddFuelModal] = useState(false);
   const [editFuelRecord, setEditFuelRecord] = useState<FuelRecord | null>(null);
 
@@ -200,7 +213,7 @@ function AppContent() {
             {/* EV Charging entry */}
             <Card
               className="cursor-pointer hover:border-sky-500 transition-all active:scale-95"
-              onClick={() => setModule('charging')}
+              onClick={() => handleSetModule('charging')}
             >
               <CardContent className="p-6">
                 <div className="flex items-center gap-4">
@@ -223,7 +236,7 @@ function AppContent() {
             {/* Fuel consumption entry */}
             <Card
               className="cursor-pointer hover:border-orange-500 transition-all active:scale-95"
-              onClick={() => setModule('fuel')}
+              onClick={() => handleSetModule('fuel')}
             >
               <CardContent className="p-6">
                 <div className="flex items-center gap-4">
@@ -256,9 +269,9 @@ function AppContent() {
         headerIconPath="M13 10V3L4 14h7v7l9-11h-7z"
         headerBgColor="bg-sky-500"
         activeTab={chargingTab}
-        setActiveTab={setChargingTab}
+        setActiveTab={handleSetChargingTab}
         user={user}
-        onBack={() => setModule('home')}
+        onBack={() => handleSetModule('home')}
         navItems={CHARGING_NAV_ITEMS}
       >
         {chargingTab === 'records' && (
@@ -286,9 +299,9 @@ function AppContent() {
       headerIconPath="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
       headerBgColor="bg-orange-500"
       activeTab={fuelTab}
-      setActiveTab={setFuelTab}
+      setActiveTab={handleSetFuelTab}
       user={user}
-      onBack={() => setModule('home')}
+      onBack={() => handleSetModule('home')}
       navItems={FUEL_NAV_ITEMS}
     >
       {fuelTab === 'records' && (

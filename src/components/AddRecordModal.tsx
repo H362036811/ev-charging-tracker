@@ -81,18 +81,24 @@ export function AddRecordModal({ isOpen, onClose, editRecord }: AddRecordModalPr
 
   // When vehicle changes, update auto-fill
   const handleVehicleChange = (vehicleId: string) => {
-    const lastRecord = getLastRecord(vehicleId);
-    const nextNum = getNextChargeNumber(vehicleId);
-    setForm(prev => ({
-      ...prev,
-      vehicle_id: vehicleId,
-      charge_duration_hours: lastRecord?.charge_duration_hours ?? prev.charge_duration_hours,
-      charge_cost: lastRecord?.charge_cost ?? prev.charge_cost,
-      station: lastRecord?.station ?? prev.station,
-      charge_number: nextNum,
-      distance_since_last_km: 0,
-      odometer_km: 0,
-    }));
+    if (editRecord) {
+      // 编辑模式：只修改车辆ID，不重置其他字段
+      setForm(prev => ({ ...prev, vehicle_id: vehicleId }));
+    } else {
+      // 新增模式：切换车辆时自动填充上次数据
+      const lastRecord = getLastRecord(vehicleId);
+      const nextNum = getNextChargeNumber(vehicleId);
+      setForm(prev => ({
+        ...prev,
+        vehicle_id: vehicleId,
+        charge_duration_hours: lastRecord?.charge_duration_hours ?? prev.charge_duration_hours,
+        charge_cost: lastRecord?.charge_cost ?? prev.charge_cost,
+        station: lastRecord?.station ?? prev.station,
+        charge_number: nextNum,
+        distance_since_last_km: 0,
+        odometer_km: 0,
+      }));
+    }
   };
 
   const handleSave = async () => {
